@@ -1,8 +1,6 @@
 
 import sympy as sp
-import matplotlib.pyplot as plt
 import numpy as np
-from lcapy import transfer
 
 # Variables symboliques pour le temps et la transformée de Laplace
 t = sp.symbols('t', real=True)
@@ -13,11 +11,11 @@ V = sp.Function('V')(s)
 I = sp.Function('I')(s)
 Re, Le, Bl = sp.symbols('R_e L_e Bl')  # Paramètres TS électriques (resistance, inductance, moteur)
 Mm, Rm, Cm = sp.symbols('M_m R_m C_m')  # Paramètres TS mécaniques (masse perte, suspension
-x = sp.Function('x')(s)
+x = sp.Function('x')(s) # position membrane
 P = sp.Function('P')(s)  # Pression acoustique
 rho, c, Sd, R_a, C_a = sp.symbols('rho c Sd R_a C_a')  # Paramètres acoustiques (densité, vitesse, surface membrane, perte visqueuses, compliance)
-v = x * s
-a = v * s
+v = x * s # vitesse membrane
+a = v * s # acceleration membrane
 
 F_motor = Bl * I
 F_mech = Mm * a + Rm * v + (1 / Cm) * x
@@ -27,26 +25,32 @@ F_acous = Sd * P
 eq_elec = sp.Eq(V, Le * s * I + Re * I  - Bl * v)
 # Équation globale de la membrane (somme des forces = M_m * a)
 eq_meca = sp.Eq(0, F_motor + F_mech - F_acous)
-
 # Équations acoustiques (impédances acoustiques)
 eq_acous = sp.Eq(P, (R_a * v + v / C_a))
 
-# Construire la matrice des équations
-matrix, constants = sp.linear_eq_to_matrix([eq_acous,
-                                                     eq_elec,
-                                                     eq_meca], [ P, x, I])
+symbols = [P, x, I, V]
 
-inverse_matrix = matrix.inv()
-solutions = inverse_matrix @ constants
+def compute_transfer(symbol_p,symbol_d):
+    # Construire la matrice des équations
+    s = [s for s in symbols if s != symbol_d]
+    matrix, constants = sp.linear_eq_to_matrix([eq_acous,
+                                                         eq_elec,
+                                                         eq_meca], s)
 
-# Fonction de transfert : P(s) / V(s)
-transfer_function = (solutions[0] / V)
+    inverse_matrix = matrix.inv()
+    solutions = inverse_matrix @ constants
 
-#impedance =  V/solutions[2]
+    solutions_dict = dict(zip(s, solutions))
+    # Fonction de transfert : P(s) / V(s)
+    transfer_function = (solutions_dict[symbol_p] / symbol_d)
 
+    #impedance =  V/solutions_dict[I]
 
-print("\nFonction de transfert (P(s) / V(s)) :")
-sp.pprint(transfer_function.simplify(),num_columns=200)
+    print("\nFonction de transfert (P(s) / V(s)) :")
+    sp.pprint(transfer_function.simplify(),num_columns=200)
+    return transfer_function.simplify()
+
+transfer_function = compute_transfer(P,I)
 
 d={ #beyma 12br70
     'Bl' : 12.1,
@@ -117,20 +121,23 @@ phase = np.angle(H_value) # Phase en degrés
 # Convertir la magnitude en dB
 magnitude_dB = 20 * np.log10(magnitude)
 
-# Créer le diagramme de Bode
-fig, axs = plt.subplots(2, 1, figsize=(10, 6))
-# Tracer la magnitude
-axs[0].semilogx(frequency_vals, magnitude_dB)
-axs[0].set_ylabel('Magnitude')
-axs[0].set_title('Diagramme de Bode')
 
-# Tracer la phase
-axs[1].semilogx(frequency_vals, np.unwrap(phase))
-axs[1].set_ylabel('Phase (rad)')
-axs[1].set_xlabel('Fréquence (rad/s)')
+if 0:
+    import matplotlib.pyplot as plt
+    # Créer le diagramme de Bode
+    fig, axs = plt.subplots(2, 1, figsize=(10, 6))
+    # Tracer la magnitude
+    axs[0].semilogx(frequency_vals, magnitude_dB)
+    axs[0].set_ylabel('Magnitude')
+    axs[0].set_title('Diagramme de Bode')
+
+    # Tracer la phase
+    axs[1].semilogx(frequency_vals, np.unwrap(phase))
+    axs[1].set_ylabel('Phase (rad)')
+    axs[1].set_xlabel('Fréquence (rad/s)')
 
 
 
-# Affichage du graphique
-plt.tight_layout()
-plt.show()
+    # Affichage du graphique
+    plt.tight_layout()
+    plt.show()
