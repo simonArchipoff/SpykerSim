@@ -1,18 +1,20 @@
 import sympy as sp
 import numpy as np
 
-# Variables symboliques pour le temps et la transformée de Laplace
-#t = sp.symbols('t', real=True)
+# variable de Laplace
 s = sp.symbols('s')
 
 # Variables électriques
 V = sp.Function('V')(s)
 I = sp.Function('I')(s)
+
 Re, Le, Bl = sp.symbols('R_e L_e Bl')  # Paramètres TS électriques (resistance, inductance, moteur)
 Mm, Rm, Cm = sp.symbols('M_m R_m C_m')  # Paramètres TS mécaniques (masse perte, compliance suspension)
+
 x = sp.Function('x')(s) # position membrane
 v = x * s # vitesse membrane
 a = v * s # acceleration membrane
+
 Pf = sp.Function('Pf')(s)  # Pression acoustique frontal
 Pb = sp.Function('Pb')(s) #pression accoustique arrière
 
@@ -21,7 +23,7 @@ rho, c, Sd = sp.symbols('rho c Sd')
 R_af, C_af, L_af, R_ab, C_ab, L_ab = sp.symbols('R_af C_af L_af R_ab C_ab L_ab')  
 
 F_motor = Bl * I
-F_mech = Mm * a + Rm * v + (1 / Cm) * x
+F_mech = Mm * a + Rm * v + (1/Cm) * x
 F_acous = Sd * (Pf - Pb) #pas sûr du signe
 
 # Équation électrique
@@ -29,11 +31,8 @@ eq_elec = sp.Eq(V, Le * s * I + Re * I  - Bl * v)
 eq_meca = sp.Eq(0, F_motor + F_mech - F_acous)
 
 # Équations acoustiques (impédances acoustiques)
-Z_f = R_af + L_af * s + 1/(C_af * s)
-eq_acousf = sp.Eq(Pf, Z_f * v)
-
-Z_b = R_ab + L_ab * s + 1/(C_ab * s)
-eq_acousb = sp.Eq(Pb, Z_b * v)
+eq_acousf = sp.Eq(Pf,R_af * v + L_af * a + (1/C_af) * x)
+eq_acousb = sp.Eq(Pb,R_ab * v + L_ab * a + (1/C_ab) * x)
 
 symbols = [Pf, Pb, x, I, V]
 
@@ -44,18 +43,12 @@ def compute_transfer(symbol_p,symbol_d):
                                                          eq_acousb,
                                                          eq_elec,
                                                          eq_meca], s)
-
     inverse_matrix = matrix.inv()
     solutions = inverse_matrix @ constants
 
     solutions_dict = dict(zip(s, solutions))
-    # Fonction de transfert : P(s) / V(s)
     transfer_function = (solutions_dict[symbol_p] / symbol_d)
 
-    #impedance =  V/solutions_dict[I]
-
-    print("\nFonction de transfert (P(s) / V(s)) :")
-    sp.pprint(transfer_function.simplify(),num_columns=200)
     return transfer_function.simplify()
 
 transfer_function = compute_transfer(Pf,V)
@@ -65,10 +58,6 @@ d={ #beyma 12br70
     'Fs' : 31,
     'Re' : 5.6,
     'Le' : 0.8e-3,
-    #'Qms' : 4.4,
-    #'Qes' : 0.44,
-    #'Qts' : 0.50,
-    #'Vas' : 142 / 1e3,
     'Cms' : 345e-6,
     'Rms' : 3.3,
     'Mms' : 0.074,
@@ -77,22 +66,24 @@ d={ #beyma 12br70
     'c_air' : 343.21,
     'rho' : 1.2041,
     #box
-    'Vb' : 70 / 1e3,
+    'Vb' : 50 / 1e3,
 }
+
+
+#pas sûr de ces valeurs
 a = (Sd / sp.pi)**0.5  # rayon effectif de la membrane (m)
 l_af = 0.6 * a  # correction d’extrémité typique
 l_ab = 0.6 * a  # longueur du volume arrière (exemple)
-
-L_af = rho * l_af / Sd  # inertance frontale (kg·s²/m³)
+L_af = rho * l_af / Sd  # inertance frontale
 L_ab = rho * l_ab / Sd  # inertance arrière
 
 d_ = {
-    "R_e" :d['Re'],
+    "R_e" : d['Re'],
     "L_e" : d['Le'],
-    "C_m":d['Cms'],
+    "C_m":  d['Cms'],
 
     "C_ab":d['Vb'] / ( d['rho'] * d['c_air'] **2 ),
-    #"C_af":  sp.oo, #grosse valeur
+    #"C_af":  sp.oo # grosse valeur à substituer avec sp.limit, elasticité volume extérieur
 
     "L_af":L_af,
     "L_ab":L_ab,
@@ -103,8 +94,6 @@ d_ = {
     "M_m" :d['Mms'], #masse mécanique
     "R_m" :d['Rms']
 }
-
-
 
 transfer_function = transfer_function.subs(d_)
 #for k,v in d_.items():
@@ -136,7 +125,7 @@ phase = []
 
 
 H_value = evaluate_transfer_function(transfer_function, frequency_vals)
-magnitude = 40 * np.log10(np.abs(H_value))  # Magnitude
+magnitude = 20 * np.log10(np.abs(H_value))  # Magnitude
 phase = np.angle(H_value) # Phase en degrés
 
 
@@ -159,8 +148,6 @@ if 1:
     axs[1].semilogx(frequency_vals, np.unwrap(phase))
     axs[1].set_ylabel('Phase (rad)')
     axs[1].set_xlabel('Fréquence (rad/s)')
-
-
 
     # Affichage du graphique
     plt.tight_layout()
