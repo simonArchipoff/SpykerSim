@@ -9,14 +9,16 @@ s = sp.symbols('s')
 V = sp.Function('V')(s)
 I = sp.Function('I')(s)
 Re, Le, Bl = sp.symbols('R_e L_e Bl')  # Paramètres TS électriques (resistance, inductance, moteur)
-Mm, Rm, Cm = sp.symbols('M_m R_m C_m')  # Paramètres TS mécaniques (masse perte, suspension
+Mm, Rm, Cm = sp.symbols('M_m R_m C_m')  # Paramètres TS mécaniques (masse perte, compliance suspension)
 x = sp.Function('x')(s) # position membrane
-Pf = sp.Function('Pf')(s)  # Pression acoustique frontal
-Pb = sp.Function('Pb')(s) #pression accoustique arrière
-rho, c, Sd = sp.symbols('rho c Sd')
-R_af, C_af, L_af, R_ab, C_ab, L_ab = sp.symbols('R_af C_af L_af R_ab C_ab L_ab')  # Paramètres acoustiques (densité, vitesse, surface membrane, perte visqueuses, compliance)
 v = x * s # vitesse membrane
 a = v * s # acceleration membrane
+Pf = sp.Function('Pf')(s)  # Pression acoustique frontal
+Pb = sp.Function('Pb')(s) #pression accoustique arrière
+
+# Paramètres acoustiques (densité, vitesse, surface membrane, perte visqueuses, compliance et masse d'air)
+rho, c, Sd = sp.symbols('rho c Sd')
+R_af, C_af, L_af, R_ab, C_ab, L_ab = sp.symbols('R_af C_af L_af R_ab C_ab L_ab')  
 
 F_motor = Bl * I
 F_mech = Mm * a + Rm * v + (1 / Cm) * x
@@ -24,20 +26,17 @@ F_acous = Sd * (Pf - Pb) #pas sûr du signe
 
 # Équation électrique
 eq_elec = sp.Eq(V, Le * s * I + Re * I  - Bl * v)
-# Équation globale de la membrane (somme des forces = M_m * a)
 eq_meca = sp.Eq(0, F_motor + F_mech - F_acous)
-# Équations acoustiques (impédances acoustiques)
 
+# Équations acoustiques (impédances acoustiques)
 Z_f = R_af + L_af * s + 1/(C_af * s)
 eq_acousf = sp.Eq(Pf, Z_f * v)
 
 Z_b = R_ab + L_ab * s + 1/(C_ab * s)
 eq_acousb = sp.Eq(Pb, Z_b * v)
 
-
-
-
 symbols = [Pf, Pb, x, I, V]
+
 def compute_transfer(symbol_p,symbol_d):
     # Construire la matrice des équations
     s = [s for s in symbols if s != symbol_d]
@@ -78,11 +77,11 @@ d={ #beyma 12br70
     'c_air' : 343.21,
     'rho' : 1.2041,
     #box
-    'Vb' : 50 / 1e3,
+    'Vb' : 70 / 1e3,
 }
 a = (Sd / sp.pi)**0.5  # rayon effectif de la membrane (m)
 l_af = 0.6 * a  # correction d’extrémité typique
-l_ab = 1.2 * a  # longueur du volume arrière (exemple)
+l_ab = 0.6 * a  # longueur du volume arrière (exemple)
 
 L_af = rho * l_af / Sd  # inertance frontale (kg·s²/m³)
 L_ab = rho * l_ab / Sd  # inertance arrière
@@ -107,13 +106,14 @@ d_ = {
 
 
 
-
-for k,v in d_.items():
-    print(f"substition de {k} = {v}")
-    transfer_function = transfer_function.subs({k:v})
-    sp.pprint(transfer_function,num_columns=200)
+transfer_function = transfer_function.subs(d_)
+#for k,v in d_.items():
+#   print(f"substition de {k} = {v}")
+#   transfer_function = transfer_function.subs({k:v})
+#   sp.pprint(transfer_function.simplify(),num_columns=200)
 
 transfer_function = sp.simplify(sp.limit(transfer_function,C_af,sp.oo))
+
 transfer_function = transfer_function.subs(d)
 sp.pprint(transfer_function,num_columns=200)
 
@@ -136,7 +136,7 @@ phase = []
 
 
 H_value = evaluate_transfer_function(transfer_function, frequency_vals)
-magnitude = 20 * np.log10(np.abs(H_value))  # Magnitude
+magnitude = 40 * np.log10(np.abs(H_value))  # Magnitude
 phase = np.angle(H_value) # Phase en degrés
 
 
@@ -148,6 +148,12 @@ if 1:
     axs[0].semilogx(frequency_vals, magnitude)
     axs[0].set_ylabel('amplitude (db)')
     axs[0].set_title('Diagramme de Bode')
+    axs[0].xaxis.set_major_formatter(plt.ScalarFormatter())
+    axs[0].grid()
+
+    max_mag = np.max(magnitude)  # valeur maximale en dB
+    axs[0].axhline(y=max_mag, color='r', linestyle='--', linewidth=1.5, label=f'Max = {max_mag:.1f} dB')
+    axs[0].axhline(y=max_mag - 3, color='g', linestyle='--', linewidth=1.5, label=f'Max - 3 dB = {max_mag - 3:.1f} dB')
 
     # Tracer la phase
     axs[1].semilogx(frequency_vals, np.unwrap(phase))
