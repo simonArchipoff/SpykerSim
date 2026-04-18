@@ -20,62 +20,37 @@ def compute_spl(frequency_hz, x_peak_m, Sd=0.0309, rho=1.2041, r_m=1.0, half_spa
     spl = 20 * np.log10(p_rms / p_ref)
     return spl
 
-
-def normalize_second_order(H, s):
+def parametres_second_ordre(H, s):
     """
-    Met une fonction de transfert rationnelle H(s) sous forme canonique
-    pour un système du second ordre passe-bas :
-        H(s) = G / (s**2 + (omega0/Q)*s + omega0**2)
-    ou, si le numérateur a des zéros, sous la forme générale :
-        H(s) = G * (s**2 + ...) / (s**2 + (omega0/Q)*s + omega0**2)
+    Calcule la pulsation propre omega et le facteur de qualité Q
+    à partir d'une fonction de transfert H(s) du second ordre.
 
     Paramètres:
-        H : expression sympy rationnelle en s
-        s : symbole de Laplace
+    H : expression sympy rationnelle (numérateur/dénominateur)
+    s : variable symbolique (souvent sp.Symbol('s'))
 
     Retourne:
-        un tuple (G, omega0, Q, num_factors) où num_factors est une liste
-        de termes (gain, zéro) pour les zéros éventuels.
+    (omega, Q) : deux expressions sympy
     """
-    # Mettre sous forme de fraction
-    H_num, H_den = sp.fraction(sp.simplify(H))
+    # Extraire le dénominateur
+    num, den = sp.fraction(H)
+    poly = sp.Poly(den, s)
 
-    # Assurer que le dénominateur est un polynôme en s
-    if not H_den.is_polynomial(s):
-        raise ValueError("Le dénominateur n'est pas un polynôme en s")
+    if poly.degree() != 2:
+        raise ValueError("Le dénominateur n'est pas du second ordre")
 
-    # Obtenir les coefficients du dénominateur (ordre décroissant)
-    coeffs = sp.Poly(H_den, s).all_coeffs()
-    order = len(coeffs) - 1
-    if order != 2:
-        raise ValueError(f"Le dénominateur n'est pas du second ordre (ordre {order})")
+    # Coefficients : c2*s^2 + c1*s + c0
+    coeffs = poly.all_coeffs()  # [c2, c1, c0]
+    c2, c1, c0 = coeffs
 
-    # Normaliser le dénominateur pour que le coefficient de s^2 soit 1
-    a2, a1, a0 = coeffs  # a2 * s^2 + a1 * s + a0
-    if a2 == 0:
-        raise ValueError("Coefficient de s^2 nul")
+    # Pulsation propre
+    omega = sp.sqrt(c0 / c2)
 
-    den_norm = sp.Poly(H_den / a2, s)  # s^2 + (a1/a2) s + (a0/a2)
-    # Extraire les coefficients normalisés
-    _, b1, b0 = den_norm.all_coeffs()
+    # Facteur de qualité
+    # Q = sqrt(c0*c2) / c1, avec gestion du cas c1=0 (Q infini)
+    if c1 == 0:
+        Q = sp.oo
+    else:
+        Q = sp.sqrt(c0 * c2) / c1
 
-    # Calculer omega0 et Q
-    # b0 = omega0^2, b1 = omega0 / Q
-    omega0 = sp.sqrt(b0)
-    Q = omega0 / b1 if b1 != 0 else sp.oo
-
-    # Gain global : G = H_num / a2
-    G = sp.simplify(H_num / a2)
-
-    # Gérer les zéros : factoriser le numérateur
-    num_poly = sp.Poly(H_num, s)
-    num_factors = []
-    if num_poly.degree() > 0:
-        # Factoriser le numérateur pour extraire les zéros
-        factors = sp.factor(num_poly).as_terms()
-        # Simplification : on peut extraire les racines
-        roots = sp.roots(num_poly, s)
-        for r, mult in roots.items():
-            num_factors.append((r, mult))
-
-    return G, omega0, Q, num_factors
+    return omega, Q

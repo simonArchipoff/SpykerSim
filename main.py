@@ -27,7 +27,7 @@ R_af, C_af, L_af, R_ab, C_ab, L_ab = sp.symbols('R_af C_af L_af R_ab C_ab L_ab')
 
 F_motor = Bl * I
 F_mech = Mm * a + Rm * v + (1/Cm) * x
-F_acous = Sd * (Pf - Pb)
+F_acous = Sd * (Pb - Pf)
 
 # Équation électrique
 eq_elec = sp.Eq(V, Le * s * I + Re * I  + Bl * v)
@@ -99,7 +99,10 @@ d_ = {
 
 
 
-transfer_function = np.sqrt(2) * compute_transfer(x,V)
+transfer_function =  compute_transfer(x,V)
+
+
+
 transfer_function = sp.simplify(sp.limit(transfer_function,C_af,sp.oo))
 transfer_function = sp.simplify(sp.limit(transfer_function,Le,0))
 transfer_function = transfer_function.subs({"L_af":0, "L_ab":0})
@@ -107,11 +110,14 @@ transfer_function = transfer_function.subs({"L_af":0, "L_ab":0})
 
 transfer_function = sp.simplify(sp.limit(transfer_function,R_af,0))
 transfer_function = sp.simplify(sp.limit(transfer_function,R_ab,0))
+
+
+
 print(transfer_function)
 #print(normalize_second_order(transfer_function,s))
-
 sp.pprint(transfer_function.simplify(),num_columns=300)
 #transfer_function =  piston_pressure_laplace( transfer_function, rho, c, a, 10000, s)
+transfer_function *= np.sqrt(2)
 
 
 transfer_function = transfer_function.subs(d_)
@@ -149,8 +155,9 @@ frequency_vals = np.arange(20, 200, 1)
 magnitude = []
 phase = []
 
-
-
+omega,q = parametres_second_ordre(transfer_function,s)
+omega /= 2 * np.pi
+print(f"{omega=}, {q=}")
 H_value = evaluate_transfer_function(transfer_function, frequency_vals)
 
 spl =  compute_spl(frequency_vals, np.abs(H_value), d['Sd'], d['rho_air'], r_m=1.0, half_space=True,p_ref=2e-5)
@@ -167,7 +174,7 @@ if 1:
     # Tracer la magnitude
     axs[0].semilogx(frequency_vals, spl)
     axs[0].set_ylabel('spl (db)')
-    axs[0].set_title('Diagramme de Bode')
+    axs[0].set_title('JBL 10GTI, 40L sealed box')
     axs[0].xaxis.set_major_formatter(plt.ScalarFormatter())
     axs[0].grid()
 
